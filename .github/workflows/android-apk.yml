@@ -80,8 +80,8 @@ jobs:
       - name: Build arm64 APK
         run: |
           find "$RUNNER_TEMP/pyside-setup" -type f -name '*.whl' -print
-          PYSIDE_WHEEL=$(find "$RUNNER_TEMP/pyside-setup/dist_android" -name 'PySide6-*.whl' -print -quit)
-          SHIBOKEN_WHEEL=$(find "$RUNNER_TEMP/pyside-setup/dist_android" -name 'shiboken6-*.whl' -print -quit)
+          PYSIDE_WHEEL=$(find "$RUNNER_TEMP/pyside-setup/dist_android" -iname 'pyside6-*.whl' -print -quit)
+          SHIBOKEN_WHEEL=$(find "$RUNNER_TEMP/pyside-setup/dist_android" -iname 'shiboken6-*.whl' -print -quit)
           test -n "$PYSIDE_WHEEL"
           test -n "$SHIBOKEN_WHEEL"
           pyside6-android-deploy --force --name AutoShortsStudio \
