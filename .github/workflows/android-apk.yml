@@ -126,11 +126,31 @@ jobs:
           pyside6-android-deploy --force --name AutoShortsStudio \
             --wheel-pyside "$PYSIDE_WHEEL" --wheel-shiboken "$SHIBOKEN_WHEEL" \
             --extra-modules Core,Gui,Widgets,Network
+          APK_PATH=$(find "$ANDROID_PROJECT" -type f -name '*.apk' -print -quit)
+          if [ -z "$APK_PATH" ]; then
+            find "$ANDROID_PROJECT" -type f \( -name '*.apk' -o -name '*.aab' \) -print
+            echo "pyside6-android-deploy finished without creating an APK"
+            exit 1
+          fi
+          python - "$APK_PATH" <<'PY'
+          import sys
+          import zipfile
+          from pathlib import Path
+          apk = Path(sys.argv[1])
+          with zipfile.ZipFile(apk) as archive:
+              names = set(archive.namelist())
+          assert "AndroidManifest.xml" in names, "APK is missing AndroidManifest.xml"
+          assert any(n.endswith(".dex") for n in names), "APK is missing DEX bytecode"
+          assert any(n.startswith("lib/arm64-v8a/") and n.endswith(".so") for n in names), "APK is missing arm64 native libraries"
+          print(f"Verified APK: {apk} ({apk.stat().st_size} bytes, {len(names)} entries)")
+          PY
+          mkdir -p "$GITHUB_WORKSPACE/android_app/release"
+          cp "$APK_PATH" "$GITHUB_WORKSPACE/android_app/release/AutoShortsStudio.apk"
 
       - name: Publish debug APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: auto-shorts-studio-android-debug
-          path: '**/*.apk'
+          path: android_app/release/AutoShortsStudio.apk
           if-no-files-found: error
           retention-days: 14
