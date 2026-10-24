@@ -67,11 +67,14 @@ jobs:
           ./autogen.sh
           mkdir "$RUNNER_TEMP/libffi-build"
           cd "$RUNNER_TEMP/libffi-build"
-          CFLAGS='-fPIC' CC="$TOOLCHAIN/aarch64-linux-android35-clang" \
+          if ! CFLAGS='-fPIC' CC="$TOOLCHAIN/aarch64-linux-android35-clang" \
             AR="$TOOLCHAIN/llvm-ar" RANLIB="$TOOLCHAIN/llvm-ranlib" \
             "$RUNNER_TEMP/libffi-src/configure" \
               --host=aarch64-linux-android --prefix="$RUNNER_TEMP/android-libffi" \
-              --disable-shared --enable-static
+              --disable-shared --enable-static; then
+            cat config.log
+            exit 1
+          fi
           make -j2
           make install
           echo "PKG_CONFIG_PATH=$RUNNER_TEMP/android-libffi/lib/pkgconfig" >> "$GITHUB_ENV"
