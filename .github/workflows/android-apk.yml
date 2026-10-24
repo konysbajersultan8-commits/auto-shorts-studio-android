@@ -53,7 +53,9 @@ jobs:
             -r "$RUNNER_TEMP/pyside-setup/tools/cross_compile_android/requirements.txt"
           python "$RUNNER_TEMP/pyside-setup/tools/cross_compile_android/main.py" \
             --plat-name=aarch64 --download-only --auto-accept-license --skip-update
-          qtpip download PySide6 --android --arch aarch64 --dest "$RUNNER_TEMP/android-wheels"
+          mkdir -p "$RUNNER_TEMP/android-wheels"
+          cd "$RUNNER_TEMP/android-wheels"
+          qtpip download PySide6 --android --arch aarch64
 
       - name: Build arm64 APK
         run: |
