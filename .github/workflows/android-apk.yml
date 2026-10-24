@@ -95,6 +95,8 @@ jobs:
       - name: Cross-compile Qt for Python Android wheels
         run: |
           set -euxo pipefail
+          TOOLCHAIN_FILE="$HOME/.pyside6_android_deploy/toolchain_aarch64.cmake"
+          echo "set(QT_HOST_PATH \"$RUNNER_TEMP/Qt/6.10.2/gcc_64\" CACHE PATH \"Host Qt installation\")" >> "$TOOLCHAIN_FILE"
           cd "$RUNNER_TEMP/pyside-setup"
           python tools/cross_compile_android/main.py --plat-name=aarch64 \
             --qt-install-path="$RUNNER_TEMP/Qt/6.10.2" \
