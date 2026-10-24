@@ -60,8 +60,17 @@ jobs:
       - name: Cross-compile Qt for Python Android wheels
         run: |
           set -euxo pipefail
-          TOOLCHAIN_FILE="$HOME/.pyside6_android_deploy/toolchain_aarch64.cmake"
-          echo "set(QT_HOST_PATH \"$RUNNER_TEMP/Qt/6.12.0/gcc_64\" CACHE PATH \"Host Qt installation\")" >> "$TOOLCHAIN_FILE"
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          template = Path(os.environ["RUNNER_TEMP"]) / "pyside-setup/tools/cross_compile_android/templates/toolchain_default.tmpl.cmake"
+          text = template.read_text()
+          marker = "set(CMAKE_SYSTEM_NAME Android)"
+          replacement = 'set(QT_HOST_PATH "$RUNNER_TEMP/Qt/6.12.0/gcc_64" CACHE PATH "Host Qt installation")\n' + marker
+          if marker not in text:
+              raise SystemExit("Could not inject the Qt host path into the Android toolchain")
+          template.write_text(text.replace(marker, replacement, 1))
+          PY
           cd "$RUNNER_TEMP/pyside-setup"
           python tools/cross_compile_android/main.py --plat-name=aarch64 \
             --qt-install-path="$RUNNER_TEMP/Qt/6.12.0" \
