@@ -123,9 +123,14 @@ jobs:
           test -n "$PYSIDE_WHEEL"
           test -n "$SHIBOKEN_WHEEL"
           cd "$ANDROID_PROJECT"
-          pyside6-android-deploy --force --name AutoShortsStudio \
+          DEPLOY_LOG="$RUNNER_TEMP/android-deploy.log"
+          if ! pyside6-android-deploy --force --name AutoShortsStudio \
             --wheel-pyside "$PYSIDE_WHEEL" --wheel-shiboken "$SHIBOKEN_WHEEL" \
-            --extra-modules Core,Gui,Widgets,Network
+            --extra-modules Core,Gui,Widgets,Network > "$DEPLOY_LOG" 2>&1; then
+            tail -n 240 "$DEPLOY_LOG"
+            exit 1
+          fi
+          tail -n 60 "$DEPLOY_LOG"
           APK_PATH=$(find "$ANDROID_PROJECT" -type f -name '*.apk' -print -quit)
           if [ -z "$APK_PATH" ]; then
             find "$ANDROID_PROJECT" -type f \( -name '*.apk' -o -name '*.aab' \) -print
