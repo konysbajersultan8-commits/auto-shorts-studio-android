@@ -128,6 +128,14 @@ jobs:
             --wheel-pyside "$PYSIDE_WHEEL" --wheel-shiboken "$SHIBOKEN_WHEEL" \
             --extra-modules Core,Gui,Widgets,Network > "$DEPLOY_LOG" 2>&1; then
             tail -n 240 "$DEPLOY_LOG"
+            echo "--- Buildozer/python-for-android diagnostic matches ---"
+            find "$HOME/.buildozer" "$ANDROID_PROJECT/.buildozer" -type f \
+              \( -name '*.log' -o -name '*.txt' \) -print0 2>/dev/null \
+              | while IFS= read -r -d '' logfile; do
+                  echo "--- $logfile ---"
+                  grep -Ein -C 2 'error|failed|exception|traceback|could not|not found|no such file|recipe|returned non-zero' "$logfile" \
+                    | tail -n 100 || true
+                done
             exit 1
           fi
           tail -n 60 "$DEPLOY_LOG"
