@@ -61,13 +61,15 @@ jobs:
         run: |
           set -euxo pipefail
           NDK="$HOME/.pyside6_android_deploy/android-ndk"
-          TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          CC_BIN=$(find "$NDK" -name 'aarch64-linux-android35-clang' -print -quit)
+          test -n "$CC_BIN" || { find "$NDK" -maxdepth 6 -print; exit 1; }
+          TOOLCHAIN="$(dirname "$CC_BIN")"
           git clone --depth 1 --branch v3.4.8 https://github.com/libffi/libffi.git "$RUNNER_TEMP/libffi-src"
           cd "$RUNNER_TEMP/libffi-src"
           ./autogen.sh
           mkdir "$RUNNER_TEMP/libffi-build"
           cd "$RUNNER_TEMP/libffi-build"
-          if ! CFLAGS='-fPIC' CC="$TOOLCHAIN/aarch64-linux-android35-clang" \
+          if ! CFLAGS='-fPIC' CC="$CC_BIN" \
             AR="$TOOLCHAIN/llvm-ar" RANLIB="$TOOLCHAIN/llvm-ranlib" \
             "$RUNNER_TEMP/libffi-src/configure" \
               --host=aarch64-linux-android --prefix="$RUNNER_TEMP/android-libffi" \
