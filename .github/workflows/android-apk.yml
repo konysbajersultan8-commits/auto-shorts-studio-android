@@ -40,66 +40,31 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential git zip unzip autoconf automake libtool pkg-config \
-            zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo6 cmake libffi-dev libssl-dev \
+            zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo6 cmake libssl-dev \
             libltdl-dev ccache gettext libdouble-conversion3 libclang-18-dev
           python -m pip install --upgrade pip setuptools wheel
-          python -m pip install 'PySide6==6.10.2' 'aqtinstall>=3.2,<4' 'buildozer>=1.5,<2' 'Cython>=0.29.36,<4'
+          python -m pip install 'PySide6==6.12.0' 'aqtinstall>=3.2,<4' 'buildozer>=1.5,<2' 'Cython>=0.29.36,<4'
           python -m pip install 'Pillow>=10,<13' 'numpy>=2,<3' 'httpx>=0.27,<1' 'elevenlabs>=2,<3'
 
       - name: Install open-source Qt Android kit and build Qt for Python Android wheels
         run: |
-          git clone --depth 1 --branch 6.10 https://code.qt.io/pyside/pyside-setup.git "$RUNNER_TEMP/pyside-setup"
+          git clone --depth 1 --branch 6.12 https://code.qt.io/pyside/pyside-setup.git "$RUNNER_TEMP/pyside-setup"
           python -m pip install -r "$RUNNER_TEMP/pyside-setup/requirements.txt" \
             -r "$RUNNER_TEMP/pyside-setup/tools/cross_compile_android/requirements.txt"
-          aqt install-qt all_os android 6.10.2 android_arm64_v8a \
+          aqt install-qt all_os android 6.12.0 android_arm64_v8a \
             --outputdir "$RUNNER_TEMP/Qt" --autodesktop
           cd "$RUNNER_TEMP/pyside-setup"
           python tools/cross_compile_android/main.py --download-only \
             --auto-accept-license --skip-update
 
-      - name: Build Android libffi for the embedded Python runtime
-        run: |
-          set -euxo pipefail
-          NDK="$HOME/.pyside6_android_deploy/android-ndk"
-          CC_BIN=$(find "$NDK" -name 'aarch64-linux-android35-clang' -print -quit)
-          test -n "$CC_BIN" || { find "$NDK" -maxdepth 6 -print; exit 1; }
-          TOOLCHAIN="$(dirname "$CC_BIN")"
-          git clone --depth 1 --branch v3.4.8 https://github.com/libffi/libffi.git "$RUNNER_TEMP/libffi-src"
-          cd "$RUNNER_TEMP/libffi-src"
-          ./autogen.sh
-          mkdir "$RUNNER_TEMP/libffi-build"
-          cd "$RUNNER_TEMP/libffi-build"
-          if ! CFLAGS='-fPIC' CC="$CC_BIN" \
-            AR="$TOOLCHAIN/llvm-ar" RANLIB="$TOOLCHAIN/llvm-ranlib" \
-            "$RUNNER_TEMP/libffi-src/configure" \
-              --host=aarch64-linux-android --prefix="$RUNNER_TEMP/android-libffi" \
-              --disable-shared --enable-static; then
-            cat config.log
-            exit 1
-          fi
-          make -j2
-          make install
-          echo "PKG_CONFIG_PATH=$RUNNER_TEMP/android-libffi/lib/pkgconfig" >> "$GITHUB_ENV"
-          python - <<'PY'
-          import os
-          from pathlib import Path
-          template = Path(os.environ["RUNNER_TEMP"]) / "pyside-setup/tools/cross_compile_android/templates/cross_compile.tmpl.sh"
-          text = template.read_text()
-          old = "export CFLAGS='-fPIC -DANDROID'"
-          new = 'export CFLAGS="-fPIC -DANDROID -I$RUNNER_TEMP/android-libffi/include"\nexport LDFLAGS="-L$RUNNER_TEMP/android-libffi/lib"'
-          if old not in text:
-              raise SystemExit("Could not add Android libffi flags to the CPython cross-build template")
-          template.write_text(text.replace(old, new))
-          PY
-
       - name: Cross-compile Qt for Python Android wheels
         run: |
           set -euxo pipefail
           TOOLCHAIN_FILE="$HOME/.pyside6_android_deploy/toolchain_aarch64.cmake"
-          echo "set(QT_HOST_PATH \"$RUNNER_TEMP/Qt/6.10.2/gcc_64\" CACHE PATH \"Host Qt installation\")" >> "$TOOLCHAIN_FILE"
+          echo "set(QT_HOST_PATH \"$RUNNER_TEMP/Qt/6.12.0/gcc_64\" CACHE PATH \"Host Qt installation\")" >> "$TOOLCHAIN_FILE"
           cd "$RUNNER_TEMP/pyside-setup"
           python tools/cross_compile_android/main.py --plat-name=aarch64 \
-            --qt-install-path="$RUNNER_TEMP/Qt/6.10.2" \
+            --qt-install-path="$RUNNER_TEMP/Qt/6.12.0" \
             --auto-accept-license --skip-update
 
       - name: Build arm64 APK
