@@ -43,7 +43,7 @@ jobs:
             zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo6 cmake libffi-dev libssl-dev \
             libltdl-dev ccache gettext
           python -m pip install --upgrade pip setuptools wheel
-          python -m pip install 'PySide6==6.10.2' 'buildozer>=1.5,<2' 'Cython>=0.29.36,<4'
+          python -m pip install 'PySide6==6.10.2' 'qtpip==0.2.0' 'buildozer>=1.5,<2' 'Cython>=0.29.36,<4'
           python -m pip install 'Pillow>=10,<13' 'numpy>=2,<3' 'httpx>=0.27,<1' 'elevenlabs>=2,<3'
 
       - name: Download Android SDK and Qt for Python Android wheels
