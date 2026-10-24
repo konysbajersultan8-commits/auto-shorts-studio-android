@@ -1,0 +1,74 @@
+name: Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'android_app/**'
+      - 'main.py'
+      - 'config.py'
+      - 'renderer.py'
+      - 'audio_*.py'
+      - 'narration.py'
+      - 'elevenlabs_tts.py'
+      - 'emoji_support.py'
+      - 'visual_engine.py'
+      - 'text_processor.py'
+      - '.github/workflows/android-apk.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Android build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential git zip unzip autoconf automake libtool pkg-config \
+            zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo6 cmake libffi-dev libssl-dev \
+            libltdl-dev ccache gettext
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install 'PySide6==6.10.2' 'buildozer>=1.5,<2' 'Cython>=0.29.36,<4'
+          python -m pip install 'Pillow>=10,<13' 'numpy>=2,<3' 'httpx>=0.27,<1' 'elevenlabs>=2,<3'
+
+      - name: Download Android SDK and Qt for Python Android wheels
+        run: |
+          git clone --depth 1 --branch 6.10 https://code.qt.io/pyside/pyside-setup.git "$RUNNER_TEMP/pyside-setup"
+          python -m pip install -r "$RUNNER_TEMP/pyside-setup/requirements.txt" \
+            -r "$RUNNER_TEMP/pyside-setup/tools/cross_compile_android/requirements.txt"
+          python "$RUNNER_TEMP/pyside-setup/tools/cross_compile_android/main.py" \
+            --plat-name=aarch64 --download-only --auto-accept-license --skip-update
+          qtpip download PySide6 --android --arch aarch64 --dest "$RUNNER_TEMP/android-wheels"
+
+      - name: Build arm64 APK
+        run: |
+          PYSIDE_WHEEL=$(find "$RUNNER_TEMP/android-wheels" -maxdepth 1 -name 'PySide6-*.whl' -print -quit)
+          SHIBOKEN_WHEEL=$(find "$RUNNER_TEMP/android-wheels" -maxdepth 1 -name 'shiboken6-*.whl' -print -quit)
+          test -n "$PYSIDE_WHEEL"
+          test -n "$SHIBOKEN_WHEEL"
+          pyside6-android-deploy --force --name AutoShortsStudio \
+            --wheel-pyside "$PYSIDE_WHEEL" --wheel-shiboken "$SHIBOKEN_WHEEL" \
+            --extra-modules Core,Gui,Widgets,Network
+
+      - name: Publish debug APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: auto-shorts-studio-android-debug
+          path: '**/*.apk'
+          if-no-files-found: error
+          retention-days: 14
