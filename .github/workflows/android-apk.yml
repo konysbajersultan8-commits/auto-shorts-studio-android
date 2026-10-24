@@ -55,11 +55,12 @@ jobs:
             --outputdir "$RUNNER_TEMP/Qt" --autodesktop
           cd "$RUNNER_TEMP/pyside-setup"
           python tools/cross_compile_android/main.py --plat-name=aarch64 \
-            --qt-install-path="$RUNNER_TEMP/Qt/6.10.2/android_arm64_v8a" \
+            --qt-install-path="$RUNNER_TEMP/Qt/6.10.2" \
             --auto-accept-license --skip-update
 
       - name: Build arm64 APK
         run: |
+          find "$RUNNER_TEMP/pyside-setup" -type f -name '*.whl' -print
           PYSIDE_WHEEL=$(find "$RUNNER_TEMP/pyside-setup/dist_android" -name 'PySide6-*.whl' -print -quit)
           SHIBOKEN_WHEEL=$(find "$RUNNER_TEMP/pyside-setup/dist_android" -name 'shiboken6-*.whl' -print -quit)
           test -n "$PYSIDE_WHEEL"
