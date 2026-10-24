@@ -79,6 +79,7 @@ jobs:
               raise SystemExit("Could not inject the Qt host path into the Android toolchain")
           template.write_text(text.replace(marker, replacement, 1))
           PY
+          mkdir -p "$RUNNER_TEMP/pyside-setup/dist_android"
           PYSIDE_WHEEL=$(find "$RUNNER_TEMP/pyside-setup/dist_android" -iname 'pyside6-*.whl' -print -quit)
           SHIBOKEN_WHEEL=$(find "$RUNNER_TEMP/pyside-setup/dist_android" -iname 'shiboken6-*.whl' -print -quit)
           if [ -z "$PYSIDE_WHEEL" ] || [ -z "$SHIBOKEN_WHEEL" ]; then
