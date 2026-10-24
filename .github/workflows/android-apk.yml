@@ -57,6 +57,13 @@ jobs:
           python tools/cross_compile_android/main.py --download-only \
             --auto-accept-license --skip-update
 
+      - name: Restore cached Qt for Python Android wheels
+        id: qt-wheels-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/pyside-setup/dist_android
+          key: pyside-android-wheels-6.12.0-android-aarch64-v1
+
       - name: Cross-compile Qt for Python Android wheels
         run: |
           set -euxo pipefail
@@ -72,19 +79,49 @@ jobs:
               raise SystemExit("Could not inject the Qt host path into the Android toolchain")
           template.write_text(text.replace(marker, replacement, 1))
           PY
-          cd "$RUNNER_TEMP/pyside-setup"
-          python tools/cross_compile_android/main.py --plat-name=aarch64 \
-            --qt-install-path="$RUNNER_TEMP/Qt/6.12.0" \
-            --auto-accept-license --skip-update
+          PYSIDE_WHEEL=$(find "$RUNNER_TEMP/pyside-setup/dist_android" -iname 'pyside6-*.whl' -print -quit)
+          SHIBOKEN_WHEEL=$(find "$RUNNER_TEMP/pyside-setup/dist_android" -iname 'shiboken6-*.whl' -print -quit)
+          if [ -z "$PYSIDE_WHEEL" ] || [ -z "$SHIBOKEN_WHEEL" ]; then
+            cd "$RUNNER_TEMP/pyside-setup"
+            python tools/cross_compile_android/main.py --plat-name=aarch64 \
+              --qt-install-path="$RUNNER_TEMP/Qt/6.12.0" \
+              --auto-accept-license --skip-update
+          fi
+
+      - name: Cache Qt for Python Android wheels
+        if: always() && steps.qt-wheels-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/pyside-setup/dist_android
+          key: pyside-android-wheels-6.12.0-android-aarch64-v1
 
       - name: Build arm64 APK
         run: |
           python -m pip install -r "$RUNNER_TEMP/pyside-setup/sources/pyside-tools/requirements-android.txt"
+          python - <<'PY'
+          from pathlib import Path
+          import PySide6
+          deploy = Path(PySide6.__file__).parent / "scripts/deploy_lib/android/buildozer.py"
+          source = deploy.read_text()
+          old = 'self.set_value("app", "requirements", "python3,shiboken6,PySide6")'
+          new = 'self.set_value("app", "requirements", "python3,shiboken6,PySide6,Pillow,numpy,httpx,elevenlabs")'
+          if old not in source:
+              raise SystemExit("Could not add the app's Android Python dependencies")
+          deploy.write_text(source.replace(old, new, 1))
+          PY
+          ANDROID_PROJECT="$RUNNER_TEMP/android-project"
+          mkdir -p "$ANDROID_PROJECT"
+          cp android_app/main.py "$ANDROID_PROJECT/main.py"
+          for module in config.py renderer.py animations.py audio_engine.py audio_export.py \
+            batch_generator.py elevenlabs_tts.py narration.py emoji_support.py visual_engine.py text_processor.py; do
+            cp "$module" "$ANDROID_PROJECT/"
+          done
           find "$RUNNER_TEMP/pyside-setup" -type f -name '*.whl' -print
           PYSIDE_WHEEL=$(find "$RUNNER_TEMP/pyside-setup/dist_android" -iname 'pyside6-*.whl' -print -quit)
           SHIBOKEN_WHEEL=$(find "$RUNNER_TEMP/pyside-setup/dist_android" -iname 'shiboken6-*.whl' -print -quit)
           test -n "$PYSIDE_WHEEL"
           test -n "$SHIBOKEN_WHEEL"
+          cd "$ANDROID_PROJECT"
           pyside6-android-deploy --force --name AutoShortsStudio \
             --wheel-pyside "$PYSIDE_WHEEL" --wheel-shiboken "$SHIBOKEN_WHEEL" \
             --extra-modules Core,Gui,Widgets,Network
