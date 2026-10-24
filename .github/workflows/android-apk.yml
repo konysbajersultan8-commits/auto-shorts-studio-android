@@ -113,6 +113,11 @@ jobs:
           new = old + '\n        self.set_value("buildozer", "log_level", "2")'
           if old not in source:
               raise SystemExit("Could not enable detailed Buildozer logs")
+          source = source.replace(old, new, 1)
+          old = 'command = [sys.executable, "-m", "buildozer", "android", mode]'
+          new = 'command = [sys.executable, "-m", "buildozer", "-v", "android", mode]'
+          if old not in source:
+              raise SystemExit("Could not enable verbose Buildozer output")
           deploy.write_text(source.replace(old, new, 1))
           PY
           ANDROID_PROJECT="$RUNNER_TEMP/android-project"
