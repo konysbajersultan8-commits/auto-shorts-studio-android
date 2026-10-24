@@ -108,6 +108,11 @@ jobs:
           new = 'self.set_value("app", "requirements", "python3,shiboken6,PySide6,Pillow,numpy,httpx,elevenlabs")'
           if old not in source:
               raise SystemExit("Could not add the app's Android Python dependencies")
+          source = source.replace(old, new, 1)
+          old = 'self.set_value("buildozer", "bin_dir", str(pysidedeploy_config.exe_dir.resolve()))'
+          new = old + '\n        self.set_value("buildozer", "log_level", "2")'
+          if old not in source:
+              raise SystemExit("Could not enable detailed Buildozer logs")
           deploy.write_text(source.replace(old, new, 1))
           PY
           ANDROID_PROJECT="$RUNNER_TEMP/android-project"
@@ -129,8 +134,8 @@ jobs:
             --extra-modules Core,Gui,Widgets,Network > "$DEPLOY_LOG" 2>&1; then
             tail -n 240 "$DEPLOY_LOG"
             echo "--- Buildozer/python-for-android diagnostic matches ---"
-            find "$HOME/.buildozer" "$ANDROID_PROJECT/.buildozer" -type f \
-              \( -name '*.log' -o -name '*.txt' \) -print0 2>/dev/null \
+            find "$HOME/.buildozer" "$ANDROID_PROJECT/.buildozer" "$ANDROID_PROJECT" -type f \
+              \( -name '*.log' -o -name '*.txt' -o -name 'buildozer.spec' \) -print0 2>/dev/null \
               | while IFS= read -r -d '' logfile; do
                   echo "--- $logfile ---"
                   grep -Ein -C 2 'error|failed|exception|traceback|could not|not found|no such file|recipe|returned non-zero' "$logfile" \
