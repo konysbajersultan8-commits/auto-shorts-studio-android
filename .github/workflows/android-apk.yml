@@ -54,6 +54,32 @@ jobs:
           aqt install-qt all_os android 6.10.2 android_arm64_v8a \
             --outputdir "$RUNNER_TEMP/Qt" --autodesktop
           cd "$RUNNER_TEMP/pyside-setup"
+          python tools/cross_compile_android/main.py --download-only \
+            --auto-accept-license --skip-update
+
+      - name: Build Android libffi for the embedded Python runtime
+        run: |
+          set -euxo pipefail
+          NDK="$HOME/.pyside6_android_deploy/android-ndk"
+          TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          git clone --depth 1 --branch v3.4.8 https://github.com/libffi/libffi.git "$RUNNER_TEMP/libffi-src"
+          cd "$RUNNER_TEMP/libffi-src"
+          ./autogen.sh
+          mkdir "$RUNNER_TEMP/libffi-build"
+          cd "$RUNNER_TEMP/libffi-build"
+          CFLAGS='-fPIC' CC="$TOOLCHAIN/aarch64-linux-android35-clang" \
+            AR="$TOOLCHAIN/llvm-ar" RANLIB="$TOOLCHAIN/llvm-ranlib" \
+            "$RUNNER_TEMP/libffi-src/configure" \
+              --host=aarch64-linux-android --prefix="$RUNNER_TEMP/android-libffi" \
+              --disable-shared --enable-static
+          make -j2
+          make install
+          echo "PKG_CONFIG_PATH=$RUNNER_TEMP/android-libffi/lib/pkgconfig" >> "$GITHUB_ENV"
+
+      - name: Cross-compile Qt for Python Android wheels
+        run: |
+          set -euxo pipefail
+          cd "$RUNNER_TEMP/pyside-setup"
           python tools/cross_compile_android/main.py --plat-name=aarch64 \
             --qt-install-path="$RUNNER_TEMP/Qt/6.10.2" \
             --auto-accept-license --skip-update
