@@ -43,24 +43,25 @@ jobs:
             zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo6 cmake libffi-dev libssl-dev \
             libltdl-dev ccache gettext libdouble-conversion3
           python -m pip install --upgrade pip setuptools wheel
-          python -m pip install 'PySide6==6.10.2' 'qtpip==0.2.0' 'buildozer>=1.5,<2' 'Cython>=0.29.36,<4'
+          python -m pip install 'PySide6==6.10.2' 'aqtinstall>=3.2,<4' 'buildozer>=1.5,<2' 'Cython>=0.29.36,<4'
           python -m pip install 'Pillow>=10,<13' 'numpy>=2,<3' 'httpx>=0.27,<1' 'elevenlabs>=2,<3'
 
-      - name: Download Android SDK and Qt for Python Android wheels
+      - name: Install open-source Qt Android kit and build Qt for Python Android wheels
         run: |
           git clone --depth 1 --branch 6.10 https://code.qt.io/pyside/pyside-setup.git "$RUNNER_TEMP/pyside-setup"
           python -m pip install -r "$RUNNER_TEMP/pyside-setup/requirements.txt" \
             -r "$RUNNER_TEMP/pyside-setup/tools/cross_compile_android/requirements.txt"
-          python "$RUNNER_TEMP/pyside-setup/tools/cross_compile_android/main.py" \
-            --plat-name=aarch64 --download-only --auto-accept-license --skip-update
-          mkdir -p "$RUNNER_TEMP/android-wheels"
-          cd "$RUNNER_TEMP/android-wheels"
-          qtpip download PySide6 --android --arch aarch64
+          aqt install-qt all_os android 6.10.2 android_arm64_v8a \
+            --outputdir "$RUNNER_TEMP/Qt" --autodesktop
+          cd "$RUNNER_TEMP/pyside-setup"
+          python tools/cross_compile_android/main.py --plat-name=aarch64 \
+            --qt-install-path="$RUNNER_TEMP/Qt/6.10.2/android_arm64_v8a" \
+            --auto-accept-license --skip-update
 
       - name: Build arm64 APK
         run: |
-          PYSIDE_WHEEL=$(find "$RUNNER_TEMP/android-wheels" -maxdepth 1 -name 'PySide6-*.whl' -print -quit)
-          SHIBOKEN_WHEEL=$(find "$RUNNER_TEMP/android-wheels" -maxdepth 1 -name 'shiboken6-*.whl' -print -quit)
+          PYSIDE_WHEEL=$(find "$RUNNER_TEMP/pyside-setup/dist_android" -name 'PySide6-*.whl' -print -quit)
+          SHIBOKEN_WHEEL=$(find "$RUNNER_TEMP/pyside-setup/dist_android" -name 'shiboken6-*.whl' -print -quit)
           test -n "$PYSIDE_WHEEL"
           test -n "$SHIBOKEN_WHEEL"
           pyside6-android-deploy --force --name AutoShortsStudio \
