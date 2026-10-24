@@ -41,7 +41,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential git zip unzip autoconf automake libtool pkg-config \
             zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo6 cmake libffi-dev libssl-dev \
-            libltdl-dev ccache gettext libdouble-conversion3
+            libltdl-dev ccache gettext libdouble-conversion3 libclang-18-dev
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install 'PySide6==6.10.2' 'aqtinstall>=3.2,<4' 'buildozer>=1.5,<2' 'Cython>=0.29.36,<4'
           python -m pip install 'Pillow>=10,<13' 'numpy>=2,<3' 'httpx>=0.27,<1' 'elevenlabs>=2,<3'
@@ -80,6 +80,17 @@ jobs:
           make -j2
           make install
           echo "PKG_CONFIG_PATH=$RUNNER_TEMP/android-libffi/lib/pkgconfig" >> "$GITHUB_ENV"
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          template = Path(os.environ["RUNNER_TEMP"]) / "pyside-setup/tools/cross_compile_android/templates/cross_compile.tmpl.sh"
+          text = template.read_text()
+          old = "export CFLAGS='-fPIC -DANDROID'"
+          new = 'export CFLAGS="-fPIC -DANDROID -I$RUNNER_TEMP/android-libffi/include"\nexport LDFLAGS="-L$RUNNER_TEMP/android-libffi/lib"'
+          if old not in text:
+              raise SystemExit("Could not add Android libffi flags to the CPython cross-build template")
+          template.write_text(text.replace(old, new))
+          PY
 
       - name: Cross-compile Qt for Python Android wheels
         run: |
