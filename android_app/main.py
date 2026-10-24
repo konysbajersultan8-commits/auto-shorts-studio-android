@@ -21,6 +21,27 @@ class JobSignals(QObject):
     failed = Signal(str)
 
 
+class VoiceSignals(QObject):
+    ready = Signal(list)
+    failed = Signal(str)
+
+
+class VoiceListJob(QRunnable):
+    def __init__(self, api_key: str, voice_id: str):
+        super().__init__()
+        self.api_key, self.voice_id = api_key, voice_id
+        self.signals = VoiceSignals()
+
+    @Slot()
+    def run(self):
+        try:
+            from elevenlabs_tts import Credentials, list_account_voices
+            voices = list_account_voices(Credentials(self.api_key, self.voice_id))
+            self.signals.ready.emit(voices)
+        except Exception as exc:
+            self.signals.failed.emit(str(exc))
+
+
 class RenderJob(QRunnable):
     def __init__(self, mode: str, args: dict):
         super().__init__()
@@ -38,6 +59,13 @@ class RenderJob(QRunnable):
                 path = export_audio(**self.args, destination=out, cancel=self.cancel,
                                     progress=lambda p, m: self.signals.progress.emit(p, m))
             else:
+                if self.mode == "batch":
+                    from batch_generator import generate_batch
+                    report, report_path = generate_batch(self.args["quotes"], self.args["options"],
+                        progress=lambda p, m: self.signals.progress.emit(p, m), cancel=self.cancel)
+                    succeeded = sum(row.get("status") == "ok" for row in report)
+                    self.signals.done.emit(f"Пакет завершён: {succeeded}/{len(report)} роликов. CSV: {report_path}")
+                    return
                 from renderer import render_video, next_video_path
                 out = next_video_path(OUTPUT)
                 path = render_video(**self.args, progress=lambda p: self.signals.progress.emit(p, "Рендеринг видео"),
@@ -92,20 +120,39 @@ class Studio(QMainWindow):
 
         audio = QWidget(); al = QVBoxLayout(audio)
         al.addWidget(QLabel("Отдельная аудиозапись — без видеорендеринга")); al.addWidget(QLabel("Текст озвучки")); al.addWidget(self.audio_text, 1)
-        self.voice_id = QLineEdit(); self.voice_id.setPlaceholderText("Voice ID ElevenLabs")
+        self.voice_id = QComboBox(); self.voice_id.setEditable(True); self.voice_id.setPlaceholderText("Voice ID ElevenLabs")
         self.api_key = QLineEdit(); self.api_key.setPlaceholderText("API ключ (только в памяти до закрытия приложения)"); self.api_key.setEchoMode(QLineEdit.EchoMode.Password)
+        self.load_voices_button = QPushButton("Загрузить голоса ElevenLabs")
+        self.load_voices_button.clicked.connect(self.load_voices)
         self.speed = QSlider(Qt.Orientation.Horizontal); self.speed.setRange(60, 140); self.speed.setValue(82)
         self.speed_label = QLabel("Скорость речи: 0.82×")
         self.speed.valueChanged.connect(lambda value: self.speed_label.setText(f"Скорость речи: {value / 100:.2f}×"))
+        self.voice_volume = QSlider(Qt.Orientation.Horizontal); self.voice_volume.setRange(0, 150); self.voice_volume.setValue(100)
+        self.reverb = QSlider(Qt.Orientation.Horizontal); self.reverb.setRange(0, 35); self.reverb.setValue(8)
+        self.pause = QSlider(Qt.Orientation.Horizontal); self.pause.setRange(0, 200); self.pause.setValue(35)
+        self.music_volume = QSlider(Qt.Orientation.Horizontal); self.music_volume.setRange(0, 100); self.music_volume.setValue(18)
         self.audio_music = QPushButton("Выбрать музыку")
         self.audio_music.clicked.connect(self.choose_music)
         self.extension = QComboBox(); self.extension.addItems(["mp3", "wav"])
         af = QFormLayout(); af.addRow("Voice ID", self.voice_id); af.addRow("API ключ", self.api_key)
+        af.addRow(self.load_voices_button)
         af.addRow(self.speed_label, self.speed); af.addRow("Экспорт", self.extension)
+        af.addRow("Громкость голоса", self.voice_volume); af.addRow("Глубина / реверберация", self.reverb)
+        af.addRow("Пауза между фразами", self.pause); af.addRow("Громкость музыки", self.music_volume)
         al.addLayout(af); al.addWidget(self.audio_music)
         self.audio_button = QPushButton("Создать аудиозапись")
         self.audio_button.clicked.connect(self.create_audio); al.addWidget(self.audio_button)
         self.tabs.addTab(audio, "Аудио")
+
+        batch = QWidget(); bl = QVBoxLayout(batch)
+        bl.addWidget(QLabel("По одной цитате на строку (TXT, CSV или JSON)"))
+        self.batch_text = QTextEdit(); self.batch_text.setPlaceholderText("Цитата первая\nЦитата вторая")
+        bl.addWidget(self.batch_text, 1)
+        self.batch_file_button = QPushButton("Открыть файл цитат")
+        self.batch_file_button.clicked.connect(self.load_batch_file); bl.addWidget(self.batch_file_button)
+        self.batch_button = QPushButton("Создать пакет видео")
+        self.batch_button.clicked.connect(self.create_batch); bl.addWidget(self.batch_button)
+        self.tabs.addTab(batch, "Пакет")
 
         settings = QWidget(); sl = QVBoxLayout(settings)
         sl.addWidget(QLabel("Файлы хранятся в личной папке приложения. Для синтеза нужен ваш API ключ ElevenLabs.\n\nГолос по фотографии не определяется. Для видео доступны локальные фоны/стили, эмодзи, [red]-акценты и анимации общего движка.\n\nВ Android не работают Windows SAPI и системные пути Windows. Для рендеринга в APK требуется встроенный Android FFmpeg."))
@@ -126,7 +173,8 @@ class Studio(QMainWindow):
             self.audio_music.setText(Path(path).name)
 
     def _credentials(self):
-        key, voice = self.api_key.text().strip(), self.voice_id.text().strip()
+        key = self.api_key.text().strip()
+        voice = self.voice_id.currentData() or self.voice_id.currentText().strip()
         if not key or not voice:
             raise ValueError("Для ElevenLabs укажите API ключ и Voice ID в разделе «Аудио».")
         os.environ["ELEVENLABS_API_KEY"] = key
@@ -142,7 +190,10 @@ class Studio(QMainWindow):
         except ValueError as exc:
             QMessageBox.warning(self, "Нужен ElevenLabs", str(exc)); return
         self._start("audio", dict(text=text, provider="elevenlabs", voice_id=voice,
+                                   options={"model_id": "eleven_multilingual_v2", "speed": self.speed.value() / 100},
                                    speed=self.speed.value() / 100, music=Path(self.music) if self.music else None,
+                                   voice_volume=self.voice_volume.value(), reverb=self.reverb.value() / 100,
+                                   pause=self.pause.value() / 100, music_volume=self.music_volume.value() / 100,
                                    extension=self.extension.currentText()))
 
     def create_video(self):
@@ -158,6 +209,59 @@ class Studio(QMainWindow):
                     format_name=self.format.currentText(), music=Path(self.music) if self.music else None,
                     narration=narration, tts_provider="elevenlabs", voice_id=voice,
                     background="По стилю"))
+
+    def load_voices(self):
+        key, voice = self.api_key.text().strip(), self.voice_id.currentText().strip()
+        if not key:
+            QMessageBox.warning(self, "Нужен ключ", "Введите API ключ ElevenLabs."); return
+        self.load_voices_button.setEnabled(False)
+        worker = VoiceListJob(key, voice)
+        worker.signals.ready.connect(self.on_voices_loaded)
+        worker.signals.failed.connect(self.on_voices_error)
+        self.pool.start(worker)
+
+    @Slot(list)
+    def on_voices_loaded(self, voices: list):
+        self.load_voices_button.setEnabled(True)
+        selected = self.voice_id.currentData() or self.voice_id.currentText()
+        self.voice_id.clear()
+        for voice in voices:
+            self.voice_id.addItem(voice.get("name", "ElevenLabs voice"), voice.get("id", ""))
+        index = next((i for i in range(self.voice_id.count()) if self.voice_id.itemData(i) == selected), -1)
+        if index >= 0: self.voice_id.setCurrentIndex(index)
+        elif selected: self.voice_id.setEditText(selected)
+        if not voices: QMessageBox.information(self, "Голоса", "Аккаунт не вернул голосов.")
+
+    @Slot(str)
+    def on_voices_error(self, message: str):
+        self.load_voices_button.setEnabled(True)
+        QMessageBox.warning(self, "ElevenLabs", message)
+
+    def load_batch_file(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Файл цитат", "", "Цитаты (*.txt *.csv *.json)")
+        if not path: return
+        try:
+            from batch_generator import parse_quotes
+            quotes = parse_quotes(path, Path(path).read_text(encoding="utf-8-sig"))
+            self.batch_text.setPlainText("\n".join(quotes))
+        except Exception as exc:
+            QMessageBox.warning(self, "Файл цитат", str(exc))
+
+    def create_batch(self):
+        raw = self.batch_text.toPlainText().strip()
+        if not raw:
+            QMessageBox.warning(self, "Нет цитат", "Введите несколько цитат или откройте файл."); return
+        try:
+            from batch_generator import parse_quotes
+            quotes = parse_quotes("quotes.txt", raw)
+            narration = self.narration.currentIndex() == 1
+            voice = self._credentials() if narration else ""
+        except Exception as exc:
+            QMessageBox.warning(self, "Пакет", str(exc)); return
+        options = dict(style=self.style.currentText(), animation=self.animation.currentText(),
+            format_name=self.format.currentText(), music=Path(self.music) if self.music else None,
+            narration=narration, tts_provider="elevenlabs", voice_id=voice, background="По стилю")
+        self._start("batch", {"quotes": quotes, "options": options})
 
     def _start(self, mode: str, args: dict):
         if self.job and self.pool.activeThreadCount():
