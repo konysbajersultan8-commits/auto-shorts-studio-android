@@ -127,6 +127,20 @@ jobs:
             batch_generator.py elevenlabs_tts.py narration.py emoji_support.py visual_engine.py text_processor.py; do
             cp "$module" "$ANDROID_PROJECT/"
           done
+          P4A_PATCH_DIR="$RUNNER_TEMP/p4a-patches"
+          mkdir -p "$P4A_PATCH_DIR"
+          cat > "$P4A_PATCH_DIR/sitecustomize.py" <<'PY'
+          import tarfile
+          # python-for-android requests USTAR explicitly, which rejects long nested paths.
+          _tarfile_open = tarfile.open
+          def _open_with_long_path_support(*args, **kwargs):
+              if kwargs.get("format") == tarfile.USTAR_FORMAT:
+                  kwargs["format"] = tarfile.PAX_FORMAT
+              return _tarfile_open(*args, **kwargs)
+          tarfile.open = _open_with_long_path_support
+          PY
+          export PYTHONPATH="$P4A_PATCH_DIR${PYTHONPATH:+:$PYTHONPATH}"
+          python -c 'import io, tarfile; t = tarfile.open(None, "w", io.BytesIO(), format=tarfile.USTAR_FORMAT); assert t.format == tarfile.PAX_FORMAT; t.close()'
           find "$RUNNER_TEMP/pyside-setup" -type f -name '*.whl' -print
           PYSIDE_WHEEL=$(find "$RUNNER_TEMP/pyside-setup/dist_android" -iname 'pyside6-*.whl' -print -quit)
           SHIBOKEN_WHEEL=$(find "$RUNNER_TEMP/pyside-setup/dist_android" -iname 'shiboken6-*.whl' -print -quit)
