@@ -134,10 +134,14 @@ jobs:
           test -n "$SHIBOKEN_WHEEL"
           cd "$ANDROID_PROJECT"
           DEPLOY_LOG="$RUNNER_TEMP/android-deploy.log"
-          if ! pyside6-android-deploy --force --name AutoShortsStudio \
+          DEPLOY_EXIT=0
+          pyside6-android-deploy --force --name AutoShortsStudio \
             --wheel-pyside "$PYSIDE_WHEEL" --wheel-shiboken "$SHIBOKEN_WHEEL" \
-            --extra-modules Core,Gui,Widgets,Network > "$DEPLOY_LOG" 2>&1; then
+            --extra-modules Core,Gui,Widgets,Network > "$DEPLOY_LOG" 2>&1 || DEPLOY_EXIT=$?
+          APK_PATH=$(find "$ANDROID_PROJECT" -type f -name '*.apk' -print -quit)
+          if [ "$DEPLOY_EXIT" -ne 0 ] || [ -z "$APK_PATH" ]; then
             tail -n 240 "$DEPLOY_LOG"
+            echo "Deploy exit code: $DEPLOY_EXIT; APK path: ${APK_PATH:-missing}"
             echo "--- Buildozer/python-for-android diagnostic matches ---"
             find "$HOME/.buildozer" "$ANDROID_PROJECT/.buildozer" "$ANDROID_PROJECT" -type f \
               \( -name '*.log' -o -name '*.txt' -o -name 'buildozer.spec' \) -print0 2>/dev/null \
@@ -146,15 +150,10 @@ jobs:
                   grep -Ein -C 2 'error|failed|exception|traceback|could not|not found|no such file|recipe|returned non-zero' "$logfile" \
                     | tail -n 100 || true
                 done
+            [ "$DEPLOY_EXIT" -ne 0 ] || { echo "Deploy returned success without creating an APK"; exit 1; }
             exit 1
           fi
           tail -n 60 "$DEPLOY_LOG"
-          APK_PATH=$(find "$ANDROID_PROJECT" -type f -name '*.apk' -print -quit)
-          if [ -z "$APK_PATH" ]; then
-            find "$ANDROID_PROJECT" -type f \( -name '*.apk' -o -name '*.aab' \) -print
-            echo "pyside6-android-deploy finished without creating an APK"
-            exit 1
-          fi
           python - "$APK_PATH" <<'PY'
           import sys
           import zipfile
